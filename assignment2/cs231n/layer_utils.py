@@ -116,7 +116,7 @@ def conv_relu_batchnorm_backward(dout, cache):
   """
   conv_cache, batchnorm_cache, relu_cache = cache
   da = relu_backward(dout, relu_cache)
-  da, dgamma, dbeta=spatial_batchnorm_backward(da, cache):
+  da, dgamma, dbeta=spatial_batchnorm_backward(da, batchnorm_cache)
   dx, dw, db = conv_backward_fast(da, conv_cache)
-  return dx, dw, db
+  return dx, dw, db, dgamma, dbeta
 

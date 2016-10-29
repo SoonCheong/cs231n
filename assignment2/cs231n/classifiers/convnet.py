@@ -6,25 +6,25 @@ from cs231n.layer_utils import *
 
 class ConvNet(object):
   """
-  A three-layer convolutional network with the following architecture:
+  A  convolutional network with the following architecture:
   
-  conv - relu - 2x2 max pool - affine - relu - affine - softmax
+  (conv - batchnorm - relu - conv - batchnorm 2x2 max pool)xM - (affine - relu)xN- affine - softmax
   
   The network operates on minibatches of data that have shape (N, C, H, W)
   consisting of N images, each with height H and width W and with C input
   channels.
   """
   
-  def __init__(self, input_dim=(3, 32, 32), num_filters=[64,32,16,4], filter_size=[7,5,3,3],
-               hidden_dim=100, num_classes=10, weight_scale=1e-3, reg=0.0,
+  def __init__(self, input_dim=(3, 32, 32), num_filters=[32,32,32], filter_size=[3,3,3],
+               hidden_dim=[100], num_classes=10, weight_scale=1e-3, reg=0.0,
                dtype=np.float32):
     """
     Initialize a new network.
     
     Inputs:
     - input_dim: Tuple (C, H, W) giving size of input data
-    - num_filters: Number of filters to use in the convolutional layer
-    - filter_size: Size of filters to use in the convolutional layer
+    - num_filters: Number of filters to use in the convolutional layers
+    - filter_size: Size of filters to use in the convolutional layers
     - hidden_dim: Number of units to use in the fully-connected hidden layer
     - num_classes: Number of scores to produce from the final affine layer.
     - weight_scale: Scalar giving standard deviation for random initialization
@@ -47,56 +47,46 @@ class ConvNet(object):
     # of the output affine layer.                                              #
     ############################################################################
     C, H, W=input_dim
-    # conv-batchnorm-relu 1
-    self.params['W1']=np.random.normal(0,weight_scale,(num_filters[0],C,filter_size[0],filter_size[0]))
-    self.params['b1']=np.zeros(num_filters[0])
-    self.params['gamma1']=np.ones(num_filters[0])
-    self.params['beta1']=np.zeros(num_filters[0])    
-
-    # conv-batachnorm-relu-pool 2
-    self.params['W2']=np.random.normal(0,weight_scale,(num_filters[1],num_filters[0],filter_size[1],filter_size[1]))
-    self.params['b2']=np.zeros(num_filters[1])
-    self.params['gamma2']=np.ones(num_filters[1])
-    self.params['beta2']=np.zeros(num_filters[1])    
-    
-    # conv-batchnorm-relu 3    
-    self.params['W3']=np.random.normal(0,weight_scale,(num_filters[2],num_filters[1],filter_size[2],filter_size[2]))
-    self.params['b3']=np.zeros(num_filters[2])
-    self.params['gamma3']=np.ones(num_filters[2])
-    self.params['beta3']=np.zeros(num_filters[2])    
-
-    # conv-batachnorm-relu-pool 4
-    self.params['W4']=np.random.normal(0,weight_scale,(num_filters[3],num_filters[2],filter_size[3],filter_size[3]))
-    self.params['b4']=np.zeros(num_filters[3])
-    self.params['gamma4']=np.ones(num_filters[3])
-    self.params['beta4']=np.zeros(num_filters[3])    
-    
-    # conv-batchnorm-relu 5    
-    self.params['W5']=np.random.normal(0,weight_scale,(num_filters[4],num_filters[3],filter_size[4],filter_size[4]))
-    self.params['b5']=np.zeros(num_filters[4])
-    self.params['gamma5']=np.ones(num_filters[4])
-    self.params['beta5']=np.zeros(num_filters[4])    
-
-    # conv-batachnorm-relu-pool 6
-    self.params['W6']=np.random.normal(0,weight_scale,(num_filters[5],num_filters[4],filter_size[5],filter_size[5]))
-    self.params['b6']=np.zeros(num_filters[5])
-    self.params['gamma6']=np.ones(num_filters[5])
-    self.params['beta6']=np.zeros(num_filters[5])    
-    
-    # affine 1
-    num_maxpool=3
-    w3_dim0=num_filters[5]*(H/(8))**2
-    self.params['W7']=np.random.normal(0, weight_scale, (w3_dim0,hidden_dim))            
-    self.params['b7']=np.zeros(hidden_dim)
-    self.params['gamma7']=np.ones(hidden_dim)
-    self.params['beta7']=np.zeros(hidden_dim)              
+    self.num_convs=len(num_filters)
+    self.num_affines=len(hidden_dim)
+    self.num_layers=self.num_convs*2+self.num_affines+1
+    self.filter_size=filter_size
+    w_dims=[C]+num_filters
+    for i in range(self.num_convs): 
+        # conv-batchnorm-relu 1
+        j=2*i
+        idx_str=str(j+1)
+        w_shape=(w_dims[i+1],w_dims[i],filter_size[i],filter_size[i])
         
-    # affine 2
-    self.params['W8']=np.random.normal(0, weight_scale, (hidden_dim,num_classes))
-    self.params['b8']=np.zeros(num_classes)
+        self.params['W'+idx_str]=np.random.normal(0,weight_scale,w_shape)
+        self.params['b'+idx_str]=np.zeros(num_filters[i])
+        self.params['gamma'+idx_str]=np.ones(num_filters[i])
+        self.params['beta'+idx_str]=np.zeros(num_filters[i])    
+        idx_str=str(j+2)
+        # conv-batachnorm-relu-pool 2
+        w_shape=(w_dims[i+1],w_dims[i+1],filter_size[i],filter_size[i])
+        self.params['W'+idx_str]=np.random.normal(0,weight_scale,w_shape)
+        self.params['b'+idx_str]=np.zeros(num_filters[i])
+        self.params['gamma'+idx_str]=np.ones(num_filters[i])
+        self.params['beta'+idx_str]=np.zeros(num_filters[i])    
+
+    w_dims=[num_filters[self.num_convs-1]*(H/(np.power(2,self.num_convs)))**2]+hidden_dim
+    #print np.power(2,self.num_convs)    
+    for i in range(self.num_affines): 
+    # affine 1
+        idx_str=str(i+2*self.num_convs+1)
+        self.params['W'+idx_str]=np.random.normal(0, weight_scale, (w_dims[i],w_dims[i+1]))  
+        self.params['b'+idx_str]=np.zeros(w_dims[i+1])
+        self.params['gamma'+idx_str]=np.ones(w_dims[i+1])
+        self.params['beta'+idx_str]=np.zeros(w_dims[i+1])              
+        
+    # Output layer
+    idx_str=str(self.num_layers)
+    self.params['W'+idx_str]=np.random.normal(0, weight_scale, (w_dims[self.num_affines],num_classes))
+    self.params['b'+idx_str]=np.zeros(num_classes)
     
     self.bn_params = []
-    num_batchnorm=7
+    num_batchnorm=self.num_layers-1
     self.bn_params = [{'mode': 'train'} for i in xrange(num_batchnorm)]    
     ############################################################################
     #                             END OF YOUR CODE                             #
@@ -116,29 +106,7 @@ class ConvNet(object):
     for bn_param in self.bn_params:
         bn_param[mode] = mode
     
-    W1, b1 = self.params['W1'], self.params['b1']
-    W2, b2 = self.params['W2'], self.params['b2']
-    W3, b3 = self.params['W3'], self.params['b3']
-    W4, b4 = self.params['W4'], self.params['b4']
-    W5, b5 = self.params['W5'], self.params['b5']
-    W6, b6 = self.params['W6'], self.params['b6'] 
-    W7, b7 = self.params['W7'], self.params['b7']
-    W8, b8 = self.params['W8'], self.params['b8']     
-    gamma1, beta1=self.params['gamma1'], self.params['beta1']
-    gamma2, beta2=self.params['gamma2'], self.params['beta2']
-    gamma3, beta3=self.params['gamma3'], self.params['beta3']
-    gamma4, beta4=self.params['gamma4'], self.params['beta4']
-    gamma5, beta5=self.params['gamma5'], self.params['beta5']
-    gamma6, beta6=self.params['gamma6'], self.params['beta6']    
-    gamma7, beta7=self.params['gamma7'], self.params['beta7']
     # pass conv_param to the forward pass for the convolutional layer
-    filter_size = [W1.shape[2], W2.shape[2], W3.shape[2], W4.shape[2],W5.shape[2],W6.shape[2]]
-    conv_param1 = {'stride': 1, 'pad': (filter_size[0] - 1) / 2}
-    conv_param2 = {'stride': 1, 'pad': (filter_size[1] - 1) / 2}
-    conv_param3 = {'stride': 1, 'pad': (filter_size[2] - 1) / 2}
-    conv_param4 = {'stride': 1, 'pad': (filter_size[3] - 1) / 2}
-    conv_param5 = {'stride': 1, 'pad': (filter_size[3] - 1) / 2}
-    conv_param6 = {'stride': 1, 'pad': (filter_size[3] - 1) / 2}
 
     # pass pool_param to the forward pass for the max-pooling layer
     pool_param = {'pool_height': 2, 'pool_width': 2, 'stride': 2}
@@ -149,20 +117,44 @@ class ConvNet(object):
     # computing the class scores for X and storing them in the scores          #
     # variable.                                                                #
     ############################################################################
-    h1, conv_cache1=conv_relu_batchnorm_forward(X, W1, b1, conv_param1, gamma1, beta1, self.bn_params[0])
-    h2, conv_cache2=conv_relu_batchnorm_forward(h1, W2, b2, conv_param2, gamma2, beta2, self.bn_params[1])    
-    h3, pool_cache1 = max_pool_forward_fast(h2, pool_param)
+    conv_param=[{'stride': 1, 'pad': (size - 1) / 2} for size in self.filter_size]
+    conv_cache=[]
+    pool_cache=[]
+    affine_relu_cache=[]
+    h=X
+    idx=0
+    for i in range(self.num_convs): 
+        # conv-batchnorm-relu 1
+        idx_str=str(idx+1)
+
+        h, cache=conv_relu_batchnorm_forward(
+            h, self.params['W'+idx_str], self.params['b'+idx_str], conv_param[i], 
+            self.params['gamma'+idx_str], self.params['beta'+idx_str], self.bn_params[idx])
+        conv_cache.append(cache)        
+        idx+=1
+        
+        idx_str=str(idx+1)
+        h, cache=conv_relu_batchnorm_forward(
+            h, self.params['W'+idx_str], self.params['b'+idx_str], conv_param[i], 
+            self.params['gamma'+idx_str], self.params['beta'+idx_str], self.bn_params[idx])
+        conv_cache.append(cache)
+        idx+=1
+        
+        h, cache = max_pool_forward_fast(h, pool_param)
+        pool_cache.append(cache)
     
-    h4, conv_cache3=conv_relu_batchnorm_forward(h3, W3, b3, conv_param3, gamma3, beta3, self.bn_params[2])
-    h5, conv_cache4=conv_relu_batchnorm_forward(h4, W4, b4, conv_param4, gamma4, beta4, self.bn_params[3])    
-    h6, pool_cache2 = max_pool_forward_fast(h5, pool_param)
+    for i in range(self.num_affines):         
+        idx_str=str(idx+1)
+        h,cache= \
+        affine_batchnorm_relu_forward(h, self.params['W'+idx_str], self.params['b'+idx_str],
+                                      self.params['gamma'+idx_str], self.params['beta'+idx_str], 
+                                      self.bn_params[idx])
+        affine_relu_cache.append(cache)
+        idx+=1
+
     
-    h7, conv_cache5=conv_relu_batchnorm_forward(h6, W5, b5, conv_param5, gamma5, beta5, self.bn_params[4])
-    h8, conv_cache6=conv_relu_batchnorm_forward(h7, W6, b6, conv_param6, gamma6, beta6, self.bn_params[5])    
-    h9, pool_cache3 = max_pool_forward_fast(h8, pool_param)
-    
-    h10,affine_relu_cache=affine_batchnorm_relu_forward(h9, W7, b7, gamma7, beta7, self.bn_params[6])
-    scores, affine_cache=affine_forward(h10, W8, b8)
+    idx_str=str(self.num_layers)
+    scores, affine_cache=affine_forward(h, self.params['W'+idx_str], self.params['b'+idx_str])
     ############################################################################
     #                             END OF YOUR CODE                             #
     ############################################################################
@@ -179,62 +171,45 @@ class ConvNet(object):
     ############################################################################
 
     loss, dx=softmax_loss(scores, y)
-    loss+=0.5*self.reg*(np.sum(W1**2)+np.sum(W2**2)+
-                        np.sum(W3**2)+np.sum(W4**2)+
-                        np.sum(W5**2)+np.sum(W6**2)+
-                        np.sum(W7**2)+np.sum(W8**2))
+    reg_loss=0
+    for i in range(self.num_layers):
+        reg_loss+=np.sum(self.params['W'+str(i+1)]**2)
+        
+    loss+=0.5*self.reg*reg_loss
     
     dx, dw, db=affine_backward(dx,affine_cache)
-    grads['W8']=dw+self.reg*W8
-    grads['b8']=db
+    layer_idx=self.num_layers
+    idx_str=str(layer_idx)
+    grads['W'+idx_str]=dw+self.reg*self.params['W'+idx_str]
+    grads['b'+idx_str]=db
     
-    dx, dw, db, dgamma, dbeta=affine_batchnorm_relu_backward(dx, affine_relu_cache)
-    grads['W7']=dw+self.reg*W7
-    grads['b7']=db
-    grads['gamma7']=dgamma
-    grads['beta7']=dbeta
+    for i in range(self.num_affines-1,-1,-1):
+        layer_idx-=1
+        idx_str=str(layer_idx)
+        dx, dw, db, dgamma, dbeta=affine_batchnorm_relu_backward(dx, affine_relu_cache.pop())
+        grads['W'+idx_str]=dw+self.reg*self.params['W'+idx_str]
+        grads['b'+idx_str]=db
+        grads['gamma'+idx_str]=dgamma
+        grads['beta'+idx_str]=dbeta
     
-    dx = max_pool_backward_fast(dx, pool_cache3)
-
-    dx, dw, db, dgamma, dbeta=conv_relu_batchnorm_backward(dx, conv_cache6)
-    grads['W6']=dw+self.reg*W6
-    grads['b6']=db    
-    grads['gamma6']=dgamma
-    grads['beta6']=dbeta
+    for i in range(self.num_convs-1,-1,-1):
+        layer_idx-=1
+        idx_str=str(layer_idx)
+        dx = max_pool_backward_fast(dx, pool_cache.pop())
+        dx, dw, db, dgamma, dbeta=conv_relu_batchnorm_backward(dx, conv_cache.pop())
+        grads['W'+idx_str]=dw+self.reg*self.params['W'+idx_str]
+        grads['b'+idx_str]=db
+        grads['gamma'+idx_str]=dgamma
+        grads['beta'+idx_str]=dbeta
     
-    dx, dw, db, dgamma, dbeta=conv_relu_batchnorm_backward(dx, conv_cache5)
-    grads['W5']=dw+self.reg*W5
-    grads['b5']=db      
-    grads['gamma5']=dgamma
-    grads['beta5']=dbeta      
+        layer_idx-=1
+        idx_str=str(layer_idx)
+        dx, dw, db, dgamma, dbeta=conv_relu_batchnorm_backward(dx, conv_cache.pop())
+        grads['W'+idx_str]=dw+self.reg*self.params['W'+idx_str]
+        grads['b'+idx_str]=db
+        grads['gamma'+idx_str]=dgamma
+        grads['beta'+idx_str]=dbeta    
     
-    dx = max_pool_backward_fast(dx, pool_cache2)
-    
-    dx, dw, db, dgamma, dbeta=conv_relu_batchnorm_backward(dx, conv_cache4)
-    grads['W4']=dw+self.reg*W4
-    grads['b4']=db    
-    grads['gamma4']=dgamma
-    grads['beta4']=dbeta
-    
-    dx, dw, db, dgamma, dbeta=conv_relu_batchnorm_backward(dx, conv_cache3)
-    grads['W3']=dw+self.reg*W3
-    grads['b3']=db      
-    grads['gamma3']=dgamma
-    grads['beta3']=dbeta      
-    
-    dx = max_pool_backward_fast(dx, pool_cache1)
-    
-    dx, dw, db, dgamma2, dbeta2=conv_relu_batchnorm_backward(dx, conv_cache2)
-    grads['W2']=dw+self.reg*W2
-    grads['b2']=db    
-    grads['gamma2']=dgamma2
-    grads['beta2']=dbeta2
-    
-    dx, dw, db, dgamma1, dbeta1=conv_relu_batchnorm_backward(dx, conv_cache1)
-    grads['W1']=dw+self.reg*W1
-    grads['b1']=db      
-    grads['gamma1']=dgamma1
-    grads['beta1']=dbeta1    
     ############################################################################
     #                             END OF YOUR CODE                             #
     ############################################################################

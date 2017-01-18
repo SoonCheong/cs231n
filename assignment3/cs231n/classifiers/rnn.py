@@ -135,7 +135,31 @@ class CaptioningRNN(object):
     # defined above to store loss and gradients; grads[k] should give the      #
     # gradients for self.params[k].                                            #
     ############################################################################
-    pass
+    #(1)
+    h0, affine_cache=affine_forward(features, W_proj, b_proj)
+    
+    #(2)
+    x, embed_cache = word_embedding_forward(captions_in, W_embed)
+    
+    #(3)
+    h, rnn_cache = rnn_forward(x, h0, Wx, Wh, b)
+    
+    #(4)
+    scores, temporal_affine_cache = temporal_affine_forward(h, W_vocab, b_vocab)
+    
+    #(5)
+    loss, dscores = temporal_softmax_loss(scores, captions_out, mask, verbose=False)    
+    
+    # Backprop
+    dh, grads['W_vocab'], grads['b_vocab'] = temporal_affine_backward(
+        dscores, temporal_affine_cache)
+    
+    dx, dh0, grads['Wx'], grads['Wh'], grads['b'] = rnn_backward(dh, rnn_cache)
+    
+    grads['W_embed'] = word_embedding_backward(dx, embed_cache)
+    
+    _, grads['W_proj'], grads['b_proj']=affine_backward(dh0, affine_cache)
+    
     ############################################################################
     #                             END OF YOUR CODE                             #
     ############################################################################
@@ -169,7 +193,7 @@ class CaptioningRNN(object):
     """
     N = features.shape[0]
     captions = self._null * np.ones((N, max_length), dtype=np.int32)
-
+    print('captions.shape',captions.shape)
     # Unpack parameters
     W_proj, b_proj = self.params['W_proj'], self.params['b_proj']
     W_embed = self.params['W_embed']
@@ -197,7 +221,33 @@ class CaptioningRNN(object):
     # functions; you'll need to call rnn_step_forward or lstm_step_forward in #
     # a loop.                                                                 #
     ###########################################################################
-    pass
+    #(1)
+    
+    N = features.shape[0]
+    
+    # Initialisation
+    # Obtain initial hidden state from feature
+    h, _ = affine_forward(features, W_proj, b_proj)
+
+    # Initial caption
+    captions[:,0] = self._start
+    
+    for i in range(max_length-1):
+        # embed caption
+        x, _ = word_embedding_forward(captions[:,i].reshape((-1,1)), W_embed)
+
+        # get the next hidden state
+        # convert x shape from Nx1xH to NxH
+        h, _ = rnn_step_forward(x.reshape((N,-1)), h, Wx, Wh, b)
+
+        # get the word
+        scores, _ = temporal_affine_forward(h.reshape((N,1,-1)), W_vocab, b_vocab)
+        
+        captions[:,i]=np.reshape(np.argmax(scores, axis=N),(N))
+        
+        
+    captions[:,max_length-1] = self._end
+    
     ############################################################################
     #                             END OF YOUR CODE                             #
     ############################################################################
